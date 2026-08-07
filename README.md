@@ -6,7 +6,7 @@ Assistente de IA que responde dúvidas técnicas de treino de hipertrofia **base
 
 ![Stack](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
-![Claude](https://img.shields.io/badge/Anthropic-Claude-D97757)
+![Gemini](https://img.shields.io/badge/Google-Gemini-4285F4?logo=google&logoColor=white)
 ![Embeddings](https://img.shields.io/badge/Embeddings-local%20(Transformers.js)-9cf)
 
 ## Por que este projeto
@@ -30,7 +30,7 @@ A base de conhecimento tem ~30 documentos sobre prescrição de hipertrofia, sin
 
 1. **Ingestão** (`scripts/ingest.ts`): lê os `.md`, quebra em chunks por seção preservando título e fontes, gera embeddings **localmente** (sem API externa) e grava um índice vetorial em JSON.
 2. **Recuperação** (`lib/retrieval.ts`): embeda a pergunta e busca os chunks mais similares por cosseno. Um **limiar de score** descarta resultados fracos.
-3. **Geração** (`app/api/chat/route.ts`): manda os trechos + a pergunta pro Claude, com um *system prompt* que o obriga a responder **só** com base neles. A resposta chega via streaming; as fontes vêm num header.
+3. **Geração** (`app/api/chat/route.ts`): manda os trechos + a pergunta pro Gemini, com um *system prompt* que o obriga a responder **só** com base neles. A resposta chega via streaming; as fontes vêm num header.
 
 ### Guardrail anti-alucinação (duas camadas)
 
@@ -47,7 +47,7 @@ Resultado: perguntas fora do tema (ex.: "como funciona a bolsa de valores?") nã
 | Estilo | Tailwind CSS v4 | UI enxuta e responsiva |
 | Embeddings | Transformers.js — `multilingual-e5-small` (384-d) | Roda **local**, sem custo/chave, e é multilíngue (bom em português) |
 | Busca vetorial | Índice em memória + cosseno | Zero infraestrutura; deploy simples |
-| LLM | Claude (Anthropic SDK) com streaming | Resposta em tempo real |
+| LLM | Google Gemini (`gemini-2.5-flash`) com streaming | Resposta em tempo real; free tier |
 
 ## Rodando localmente
 
@@ -55,9 +55,9 @@ Resultado: perguntas fora do tema (ex.: "como funciona a bolsa de valores?") nã
 # 1. Instalar dependências
 npm install
 
-# 2. Configurar a chave da Anthropic
+# 2. Configurar a chave do Gemini (gratuita: https://aistudio.google.com/apikey)
 cp .env.example .env.local
-# edite .env.local e cole sua ANTHROPIC_API_KEY
+# edite .env.local e cole sua GEMINI_API_KEY
 
 # 3. Gerar o índice vetorial a partir dos documentos
 npm run ingest

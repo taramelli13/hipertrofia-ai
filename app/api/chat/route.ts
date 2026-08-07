@@ -1,12 +1,12 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import { retrieve } from "@/lib/retrieval";
 import { SYSTEM_PROMPT, buildUserMessage } from "@/lib/prompt";
 
-// Transformers.js precisa do runtime Node (não roda no edge).
+// Transformers.js (embeddings locais) precisa do runtime Node (não roda no edge).
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "gemini-2.5-flash";
 
 export async function POST(req: Request) {
   let question: string;
@@ -21,10 +21,10 @@ export async function POST(req: Request) {
     return Response.json({ error: "Pergunta vazia." }, { status: 400 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return Response.json(
-      { error: "ANTHROPIC_API_KEY não configurada. Veja o .env.example." },
+      { error: "GEMINI_API_KEY não configurada. Veja o .env.example." },
       { status: 500 },
     );
   }
@@ -41,30 +41,31 @@ export async function POST(req: Request) {
     score: Number(c.score.toFixed(3)),
   }));
 
-  // 2. Chama o Claude com streaming, ancorado nos trechos.
-  const anthropic = new Anthropic({ apiKey });
-  const llmStream = anthropic.messages.stream({
-    model: MODEL,
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: buildUserMessage(question, chunks) }],
-  });
+  // 2. Chama o Gemini com streaming, ancorado nos trechos.
+  const ai = new GoogleGenAI({ apiKey });
 
   const encoder = new TextEncoder();
   const body = new ReadableStream({
     async start(controller) {
       try {
-        for await (const event of llmStream) {
-          if (
-            event.type === "content_block_delta" &&
-            event.delta.type === "text_delta"
-          ) {
-            controller.enqueue(encoder.encode(event.delta.text));
-          }
+        const stream = await ai.models.generateContentStream({
+          model: MODEL,
+          contents: buildUserMessage(question, chunks),
+          config: {
+            systemInstruction: SYSTEM_PROMPT,
+            maxOutputTokens: 1024,
+            temperature: 0.3,
+          },
+        });
+        for await (const chunk of stream) {
+          const text = chunk.text;
+          if (text) controller.enqueue(encoder.encode(text));
         }
       } catch (err) {
         controller.enqueue(
-          encoder.encode("\n\n[erro ao gerar resposta: " + (err as Error).message + "]"),
+          encoder.encode(
+            "\n\n[erro ao gerar resposta: " + (err as Error).message + "]",
+          ),
         );
       } finally {
         controller.close();
