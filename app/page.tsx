@@ -65,7 +65,9 @@ export default function Home() {
       const raw = res.headers.get("X-Sources");
       if (raw) {
         try {
-          sources = JSON.parse(atob(raw));
+          // Decodifica base64 -> bytes -> UTF-8 (atob sozinho corrompe acentos).
+          const bytes = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
+          sources = JSON.parse(new TextDecoder().decode(bytes));
         } catch {}
       }
 
