@@ -6,7 +6,7 @@ import { SYSTEM_PROMPT, buildUserMessage } from "@/lib/prompt";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-flash-latest";
 
 export async function POST(req: Request) {
   let question: string;
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   }
 
   // 1. Recupera os trechos relevantes (RAG).
-  const chunks = await retrieve(question, { topK: 5, minScore: 0.86 });
+  const chunks = await retrieve(question, { topK: 5, minScore: 0.68 });
 
   // Metadados das fontes, enviados ao cliente via header.
   const sources = chunks.map((c, i) => ({

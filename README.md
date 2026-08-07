@@ -7,7 +7,7 @@ Assistente de IA que responde dúvidas técnicas de treino de hipertrofia **base
 ![Stack](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
 ![Gemini](https://img.shields.io/badge/Google-Gemini-4285F4?logo=google&logoColor=white)
-![Embeddings](https://img.shields.io/badge/Embeddings-local%20(Transformers.js)-9cf)
+![Embeddings](https://img.shields.io/badge/Embeddings-gemini--embedding--001-9cf)
 
 ## Por que este projeto
 
@@ -17,8 +17,8 @@ A base de conhecimento tem ~30 documentos sobre prescrição de hipertrofia, sin
 
 ```
                         INGESTÃO (offline, npm run ingest)
-  docs .md  ──►  chunking por seção  ──►  embeddings locais  ──►  data/index.json
-                                          (multilingual-e5)        (índice vetorial)
+  docs .md  ──►  chunking por seção  ──►  embeddings (Gemini)  ──►  data/index.json
+                                          (gemini-embedding-001)    (índice vetorial)
 
                         CONSULTA (online, por pergunta)
   pergunta  ──►  embedding da pergunta  ──►  similaridade de cosseno (top-k)
@@ -28,7 +28,7 @@ A base de conhecimento tem ~30 documentos sobre prescrição de hipertrofia, sin
                                           resposta com citações  ──►  UI
 ```
 
-1. **Ingestão** (`scripts/ingest.ts`): lê os `.md`, quebra em chunks por seção preservando título e fontes, gera embeddings **localmente** (sem API externa) e grava um índice vetorial em JSON.
+1. **Ingestão** (`scripts/ingest.ts`): lê os `.md`, quebra em chunks por seção preservando título e fontes, gera embeddings via API do Gemini (com throttling para o rate limit do free tier) e grava um índice vetorial em JSON.
 2. **Recuperação** (`lib/retrieval.ts`): embeda a pergunta e busca os chunks mais similares por cosseno. Um **limiar de score** descarta resultados fracos.
 3. **Geração** (`app/api/chat/route.ts`): manda os trechos + a pergunta pro Gemini, com um *system prompt* que o obriga a responder **só** com base neles. A resposta chega via streaming; as fontes vêm num header.
 
@@ -45,7 +45,7 @@ Resultado: perguntas fora do tema (ex.: "como funciona a bolsa de valores?") nã
 |---|---|---|
 | Front + Back | Next.js 16 (App Router) + TypeScript | Um só projeto para UI e API |
 | Estilo | Tailwind CSS v4 | UI enxuta e responsiva |
-| Embeddings | Transformers.js — `multilingual-e5-small` (384-d) | Roda **local**, sem custo/chave, e é multilíngue (bom em português) |
+| Embeddings | Google `gemini-embedding-001` (768-d) | Sem binário nativo — roda bem em serverless; distingue query/document por taskType |
 | Busca vetorial | Índice em memória + cosseno | Zero infraestrutura; deploy simples |
 | LLM | Google Gemini (`gemini-2.5-flash`) com streaming | Resposta em tempo real; free tier |
 
@@ -75,7 +75,7 @@ npm run dev
 │   └── index.json             # índice vetorial gerado pela ingestão
 ├── lib/
 │   ├── chunk.ts               # quebra markdown em chunks por seção
-│   ├── embeddings.ts          # embeddings locais (Transformers.js) + cosseno
+│   ├── embeddings.ts          # embeddings via API do Gemini + cosseno
 │   ├── retrieval.ts           # busca vetorial + limiar do guardrail
 │   ├── prompt.ts              # system prompt (grounding) + montagem de contexto
 │   └── types.ts               # tipagem do pipeline
@@ -89,8 +89,9 @@ npm run dev
 
 ## Decisões técnicas
 
-- **Embeddings locais em vez de API**: mantém o custo em zero, roda offline e demonstra o funcionamento por baixo do capô. Para escala, o índice em memória pode migrar para um vector DB (Postgres + pgvector, Pinecone) sem mudar a interface de `retrieval.ts`.
-- **`multilingual-e5-small`**: um primeiro protótipo com `all-MiniLM` (inglês) discriminava mal em português — perguntas fora do tema pontuavam quase igual às válidas. O modelo multilíngue (com os prefixos `query:`/`passage:` que a família E5 exige) deu separação real e viabilizou o guardrail.
+- **Embeddings via API em vez de modelo local**: o primeiro protótipo rodava os embeddings localmente com Transformers.js — ótimo em dev (custo zero, offline), mas o binário nativo do `onnxruntime` **quebrava a função serverless na Vercel** (a função crashava na inicialização). Migrei para a API de embeddings do Gemini: sem binário nativo, sem download de modelo no cold start, e usando a mesma chave do LLM. Um trade-off real de arquitetura para viabilizar o deploy.
+- **Calibração do guardrail**: com os embeddings do Gemini, perguntas dentro do tema pontuam ~0.74–0.80 e fora do tema ~0.53–0.58. O limiar de similaridade (0.68) fica no meio dessa folga, separando os dois casos de forma confiável.
+- **Índice importado como módulo**: `retrieval.ts` importa `data/index.json` diretamente (em vez de `fs.readFile` em runtime) para garantir que o índice seja empacotado na função serverless.
 - **Chunking por seção `##`**: preserva a unidade semântica de cada tópico e mantém a linha de fontes junto, permitindo citação precisa.
 
 ## Limitações e próximos passos
